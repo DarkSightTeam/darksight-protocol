@@ -47,10 +47,33 @@ DarkSight separates **public price discovery** from **private position managemen
 ### Installation
 
 ```bash
-# Install SDK and Circuit dependencies
+# Install SDK dependencies
 cd sdk && npm install
+
+# Install Circuit dependencies
 cd ../circuits && npm install
 ```
+
+### Development
+
+```bash
+# Run SDK tests
+cd sdk && npm test
+
+# Run Circuit tests
+cd circuits && npm test
+
+# Build circuits
+cd circuits && npm run build
+
+# Generate proofs
+cd circuits && npm run generate-proofs
+
+# Benchmark performance
+cd circuits && npm run benchmark
+```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed development guidelines.
 
 ## Security
 

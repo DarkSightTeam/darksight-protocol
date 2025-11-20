@@ -1,131 +1,181 @@
 # DarkSight Circuits
 
-Zero-knowledge proof circuits for DarkSight privacy-preserving prediction markets.
+Zero-knowledge proof circuits for DarkSight protocol, implemented in Circom 2.1.0.
 
 ## Overview
 
-This repository contains the Circom circuit implementations for DarkSight's three core operations:
-1. **Deposit Circuit**: Shielded pool deposits with Merkle tree insertion
-2. **Position Update Circuit**: Private position updates and trade execution
-3. **Withdrawal Circuit**: Withdrawals with nullifier proofs
+DarkSight uses three primary circuits:
 
-## Status
-
-⚠️ **Pre-Alpha**: These circuits are in active development. The implementations are not yet complete and have not been audited.
-
-## Architecture
-
-### Deposit Circuit
-
-Handles deposits into the shielded pool with Merkle tree insertion proofs.
-
-**Public Inputs**:
-- `deposit_amount`: Visible amount entering shielded pool
-- `new_root`: Updated Merkle root after insertion
-- `timestamp`: Block timestamp for temporal mixing
-
-**Private Inputs**:
-- `secret`: User's private randomness
-- `nullifier`: Derived from secret
-- `merkle_path`: Witness for tree insertion
-
-**Constraints**:
-1. Commitment correctly formed: `C = H(amount, secret, nullifier)`
-2. Merkle path valid: `verify_path(old_root, new_root, commitment, path)`
-3. Range proof: `0 < amount < 2^64`
-4. Temporal mixing: `timestamp ∈ [current - 6h, current]`
-
-### Position Update Circuit
-
-Manages private position updates and trade execution.
-
-**Public Inputs**:
-- `market_id`: Which prediction market
-- `new_pool_state`: Encrypted aggregate pool state
-- `price_impact`: Public price update
-
-**Private Inputs**:
-- `position_before`: Previous position commitment
-- `position_after`: New position commitment
-- `trade_amount`: Size and direction
-- `secret_key`: For authorization
-
-**Constraints**:
-1. Valid state transition: `position_after = position_before + trade`
-2. Sufficient balance: `balance_after ≥ 0`
-3. Valid market: `market_id ∈ active_markets`
-4. Price calculation correct per AMM formula
-5. Authorization: `verify_sig(secret_key, hash(inputs))`
-
-### Withdrawal Circuit
-
-Processes withdrawals with nullifier proofs to prevent double-spending.
-
-**Public Inputs**:
-- `nullifier`: Prevent double-spending
-- `amount`: Withdrawal amount
-- `recipient`: Destination address (optionally shielded)
-
-**Private Inputs**:
-- `position`: Complete position state
-- `merkle_path`: Proof of inclusion
-- `secret`: Proves ownership
-
-**Constraints**:
-1. Position exists: `verify_merkle(root, position, path)`
-2. Nullifier correct: `nullifier = H(secret, position)`
-3. Amount valid: `amount ≤ position.balance`
-4. Authorization: `verify_sig(secret, hash(inputs))`
-
-## Setup
-
-### Prerequisites
-
-- Node.js 18+
-- Circom 2.x
-- SnarkJS
-
-### Installation
-
-```bash
-npm install
-```
-
-### Build Circuits
-
-```bash
-npm run build
-```
-
-### Generate Proofs
-
-```bash
-npm run generate-proofs
-```
-
-### Run Tests
-
-```bash
-npm test
-```
+1. **Deposit Circuit** - Handles shielded pool deposits with Merkle tree insertion
+2. **Position Update Circuit** - Manages private position updates with AMM invariant checks
+3. **Withdrawal Circuit** - Processes withdrawals with nullifier proofs
 
 ## Circuit Specifications
 
-See [specs/](./specs/) for detailed circuit specifications matching the whitepaper.
+### Deposit Circuit (`deposit.circom`)
 
-## Test Vectors
+**Public Inputs:**
+- `deposit_amount`: Amount being deposited (64-bit)
+- `new_root`: New Merkle root after insertion
+- `timestamp`: Unix timestamp for temporal mixing
 
-See [test-vectors/](./test-vectors/) for comprehensive test vectors.
+**Private Inputs:**
+- `secret`: User's private secret (field element)
+- `nullifier_key`: Derived from secret
+- `old_root`: Previous Merkle root
+- `pathElements[32]`: Merkle path sibling hashes
+- `pathIndices[32]`: Merkle path directions (0/1)
 
-## Benchmarks
+**Constraints:**
+1. Amount range check: `0 <= deposit_amount < 2^64`
+2. Nullifier derivation: `nullifier = Poseidon(secret, commitment)`
+3. Commitment generation: `commitment = Poseidon(amount, secret, index)`
+4. Merkle tree insertion verification
+5. Timestamp validation (64-bit format)
 
-See [benchmarks/](./benchmarks/) for proof generation time benchmarks.
+**Security Properties:**
+- Nullifier is cryptographically bound to secret + commitment (not pathIndices)
+- Prevents double-spending through nullifier uniqueness
+- Temporal mixing enforced via timestamp constraints
 
-## Security
+### Position Update Circuit (`position_update.circom`)
 
-⚠️ **Warning**: These circuits have not been audited. Do not use in production.
+**Public Inputs:**
+- `market_id`: Market identifier
+- `pool_token_a`: Current pool reserves for Token A
+- `pool_token_b`: Current pool reserves for Token B
+- `new_pool_token_a`: New pool reserves for Token A
+- `new_pool_token_b`: New pool reserves for Token B
 
-## License
+**Private Inputs:**
+- `amount_in`: Amount of tokens being traded
+- `is_buy_a`: 1 if buying Token A, 0 if buying Token B
+- `min_amount_out`: Minimum output amount (slippage protection)
+- `user_secret`: Authorization secret
+- `position_commitment`: Commitment to user's position
 
-MIT License - See [LICENSE](./LICENSE) file for details.
+**Constraints:**
+1. Range checks on all inputs (64-bit)
+2. Constant Product Market Maker (CPMM) invariant: `k_new >= k_old`
+3. Balance consistency: State transition follows swap formula
+4. Slippage protection: `amount_out >= min_amount_out`
+5. Authorization: Secret-based position verification
+6. Pool safety: Pools cannot go to zero
 
+**AMM Logic:**
+- Buying A: `new_pool_b = pool_b + amount_in`, `new_pool_a = k_old / new_pool_b`
+- Buying B: `new_pool_a = pool_a + amount_in`, `new_pool_b = k_old / new_pool_a`
+
+### Withdrawal Circuit (`withdrawal.circom`)
+
+**Public Inputs:**
+- `root`: Current Merkle root
+- `nullifierHash`: Unique nullifier for this note
+- `recipient`: Address to receive funds
+
+**Private Inputs:**
+- `secret`: User's secret key
+- `amount`: Amount in the note
+- `pathElements[32]`: Merkle path sibling hashes
+- `pathIndices[32]`: Merkle path directions
+
+**Constraints:**
+1. Commitment reconstruction: `commitment = Poseidon(amount, secret, index)`
+2. Nullifier derivation: `nullifier = Poseidon(secret, commitment)`
+3. Nullifier verification: Public nullifier matches computed nullifier
+4. Merkle membership proof verification
+5. Recipient binding: `boundNullifier = Poseidon(nullifier, recipient)`
+6. Recipient non-zero check
+7. Amount range check (64-bit)
+
+**Security Properties:**
+- Prevents double-spending via nullifier uniqueness
+- Recipient binding prevents replay attacks
+- Merkle proof ensures note exists in tree
+
+## Building Circuits
+
+```bash
+# Install dependencies
+npm install
+
+# Compile all circuits
+npm run build
+
+# This generates:
+# - build/deposit.wasm
+# - build/deposit.r1cs
+# - build/position_update.wasm
+# - build/position_update.r1cs
+# - build/withdrawal.wasm
+# - build/withdrawal.r1cs
+```
+
+## Testing
+
+```bash
+# Run all circuit tests
+npm test
+
+# Run specific test file
+npm test -- deposit.test.js
+```
+
+**Note:** Tests require compiled circuits. Run `npm run build` first.
+
+## Proof Generation
+
+```bash
+# Generate test proofs
+npm run generate-proofs
+
+# This creates test vectors in test-vectors/
+```
+
+## Benchmarking
+
+```bash
+# Benchmark proof generation times
+npm run benchmark
+
+# Target: <3 seconds per proof generation
+```
+
+## Trusted Setup
+
+For production use, a trusted setup ceremony must be performed to generate:
+- Proving keys (`.zkey` files)
+- Verification keys (`.vkey` files)
+
+**Warning:** The current repository does not include trusted setup files. These must be generated through a secure ceremony before production deployment.
+
+## Security Considerations
+
+⚠️ **Pre-Alpha Status:**
+- Circuits have not been audited
+- Trusted setup has not been performed
+- Do not use in production
+
+**Known Limitations:**
+- Temporal mixing bounds checking happens on-chain (not in circuit)
+- Position update authorization is simplified (full Merkle check would be ideal)
+- Some optimizations may be possible for constraint count
+
+## Performance Targets
+
+- Proof generation: <3 seconds
+- Proof size: ~128 bytes (Groth16)
+- Verification time: ~5ms on-chain
+
+## Dependencies
+
+- `circom@^2.1.8` - Circuit compiler
+- `circomlib@^2.0.5` - Circuit library (Poseidon, Pedersen)
+- `snarkjs@^0.7.0` - Proof generation and verification
+- `jest@^29.7.0` - Testing framework
+
+## References
+
+- [Circom Documentation](https://docs.circom.io/)
+- [Circomlib](https://github.com/iden3/circomlib)
+- [SnarkJS](https://github.com/iden3/snarkjs)
