@@ -12,25 +12,14 @@ const BUILD_DIR = path.join(__dirname, '../build');
 const WASM_PATH = path.join(BUILD_DIR, 'position_update.wasm');
 const ZKEY_PATH = path.join(BUILD_DIR, 'position_update_0001.zkey');
 
-describe('Position Update Circuit', () => {
-    let wasmExists = false;
-    let zkeyExists = false;
+const wasmExists = fs.existsSync(WASM_PATH);
+const zkeyExists = fs.existsSync(ZKEY_PATH);
 
-    beforeAll(() => {
-        wasmExists = fs.existsSync(WASM_PATH);
-        zkeyExists = fs.existsSync(ZKEY_PATH);
-        
-        if (!wasmExists || !zkeyExists) {
-            console.warn('Circuit files not found. Run "npm run build" first.');
-        }
-    });
+const describeIf = (condition) => condition ? describe : describe.skip;
 
+describeIf(wasmExists && zkeyExists)('Position Update Circuit', () => {
     describe('AMM Invariant Constraints', () => {
         it('should accept valid buy A transaction', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
 
             // Buying Token A: add to pool_b, remove from pool_a
             // Initial: pool_a = 1000, pool_b = 1000, k = 1,000,000
@@ -65,11 +54,6 @@ describe('Position Update Circuit', () => {
         });
 
         it('should accept valid buy B transaction', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Buying Token B: add to pool_a, remove from pool_b
             const inputs = {
                 market_id: '1',
@@ -98,11 +82,6 @@ describe('Position Update Circuit', () => {
         });
 
         it('should reject transactions that violate AMM invariant', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Invalid: new_pool_a * new_pool_b < k_old
             const inputs = {
                 market_id: '1',
@@ -129,11 +108,6 @@ describe('Position Update Circuit', () => {
 
     describe('Slippage Protection', () => {
         it('should enforce min_amount_out constraint', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Transaction where amount_out < min_amount_out should fail
             const inputs = {
                 market_id: '1',
@@ -160,11 +134,6 @@ describe('Position Update Circuit', () => {
 
     describe('Range Checks', () => {
         it('should enforce amount_in range', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Test with valid range
             const inputs = {
                 market_id: '1',
@@ -190,11 +159,6 @@ describe('Position Update Circuit', () => {
 
     describe('Pool Safety Checks', () => {
         it('should reject transactions that empty a pool', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Attempt to drain pool_a
             const inputs = {
                 market_id: '1',

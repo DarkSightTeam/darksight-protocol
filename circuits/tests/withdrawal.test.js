@@ -12,25 +12,14 @@ const BUILD_DIR = path.join(__dirname, '../build');
 const WASM_PATH = path.join(BUILD_DIR, 'withdrawal.wasm');
 const ZKEY_PATH = path.join(BUILD_DIR, 'withdrawal_0001.zkey');
 
-describe('Withdrawal Circuit', () => {
-    let wasmExists = false;
-    let zkeyExists = false;
+const wasmExists = fs.existsSync(WASM_PATH);
+const zkeyExists = fs.existsSync(ZKEY_PATH);
 
-    beforeAll(() => {
-        wasmExists = fs.existsSync(WASM_PATH);
-        zkeyExists = fs.existsSync(ZKEY_PATH);
-        
-        if (!wasmExists || !zkeyExists) {
-            console.warn('Circuit files not found. Run "npm run build" first.');
-        }
-    });
+const describeIf = (condition) => condition ? describe : describe.skip;
 
+describeIf(wasmExists && zkeyExists)('Withdrawal Circuit', () => {
     describe('Valid Withdrawals', () => {
         it('should accept valid withdrawal with correct nullifier', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
 
             const inputs = {
                 root: '1234567890',
@@ -57,11 +46,6 @@ describe('Withdrawal Circuit', () => {
         });
 
         it('should handle maximum withdrawal amount', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             const inputs = {
                 root: '1234567890',
                 nullifierHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
@@ -83,11 +67,6 @@ describe('Withdrawal Circuit', () => {
 
     describe('Nullifier Validation', () => {
         it('should reject withdrawal with incorrect nullifier', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Nullifier doesn't match secret+commitment derivation
             const inputs = {
                 root: '1234567890',
@@ -111,11 +90,6 @@ describe('Withdrawal Circuit', () => {
 
     describe('Recipient Binding', () => {
         it('should reject withdrawal with zero recipient', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             const inputs = {
                 root: '1234567890',
                 nullifierHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
@@ -138,11 +112,6 @@ describe('Withdrawal Circuit', () => {
 
     describe('Merkle Path Validation', () => {
         it('should reject withdrawal with invalid Merkle path', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
-
             // Invalid path that doesn't lead to root
             const inputs = {
                 root: '9999999999',  // Wrong root

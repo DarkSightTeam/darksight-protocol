@@ -60,8 +60,9 @@ jobs:
       
       - name: Run Circuit tests
         working-directory: ./circuits
-        run: npm test || echo "Circuit tests skipped (circuits not compiled)"
+        run: npm test
         continue-on-error: true
+        if: always()
 
   lint:
     name: Lint Code

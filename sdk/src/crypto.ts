@@ -53,11 +53,11 @@ export class CryptoUtils {
      * For full Pedersen commitments (v*G + r*H), we'd need elliptic curve operations.
      * This implementation uses PedersenHash which is SNARK-friendly and matches circuit usage.
      * 
-     * @param value - The value to commit to (as number or BN)
+     * @param value - The value to commit to (as number or BN instance)
      * @param randomness - Randomness as hex string
      * @returns Commitment as hex string
      */
-    static async pedersenCommitment(value: number | BN, randomness: string): Promise<string> {
+    static async pedersenCommitment(value: number | InstanceType<typeof BN>, randomness: string): Promise<string> {
         const pedersen = await getPedersenHash();
         const v = typeof value === 'number' ? new BN(value) : value;
         const r = new BN(randomness, 'hex');
@@ -74,23 +74,36 @@ export class CryptoUtils {
      * Compute Poseidon hash
      * Used for Merkle trees and nullifier generation
      * 
-     * @param inputs - Array of inputs (numbers, BN, or hex strings)
+     * @param inputs - Array of inputs (numbers, BN instance, or hex strings)
      * @returns Hash as hex string
      */
-    static async poseidonHash(inputs: (number | BN | string)[]): Promise<string> {
+    static async poseidonHash(inputs: (number | InstanceType<typeof BN> | string)[]): Promise<string> {
         const poseidonInstance = await getPoseidon();
         
         // Convert all inputs to BigInt
         const bigIntInputs = inputs.map(input => {
             if (typeof input === 'string') {
+                // Handle hex strings
                 if (input.startsWith('0x')) {
+                    try {
+                        return BigInt(input);
+                    } catch {
+                        // If invalid hex, try treating as decimal
+                        return BigInt(parseInt(input, 16) || 0);
+                    }
+                }
+                // Try hex first, then decimal
+                try {
+                    return BigInt('0x' + input);
+                } catch {
                     return BigInt(input);
                 }
-                return BigInt('0x' + input);
             }
             if (BN.isBN(input)) {
-                return BigInt(input.toString());
+                // BN toString() returns decimal, convert to BigInt
+                return BigInt(input.toString(10));
             }
+            // Number - convert directly
             return BigInt(input);
         });
         
@@ -125,9 +138,8 @@ export class CryptoUtils {
      * @returns Commitment as hex string
      */
     static async computeCommitment(amount: number, secret: string, index: number): Promise<string> {
-        const amountBN = new BN(amount);
-        const indexBN = new BN(index);
-        return await this.poseidonHash([amountBN.toString(), secret, indexBN.toString()]);
+        // Pass numbers directly - poseidonHash will handle conversion
+        return await this.poseidonHash([amount, secret, index]);
     }
 
     /**

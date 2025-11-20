@@ -12,25 +12,14 @@ const BUILD_DIR = path.join(__dirname, '../build');
 const WASM_PATH = path.join(BUILD_DIR, 'deposit.wasm');
 const ZKEY_PATH = path.join(BUILD_DIR, 'deposit_0001.zkey');
 
-describe('Deposit Circuit', () => {
-    let wasmExists = false;
-    let zkeyExists = false;
+const wasmExists = fs.existsSync(WASM_PATH);
+const zkeyExists = fs.existsSync(ZKEY_PATH);
 
-    beforeAll(() => {
-        wasmExists = fs.existsSync(WASM_PATH);
-        zkeyExists = fs.existsSync(ZKEY_PATH);
-        
-        if (!wasmExists || !zkeyExists) {
-            console.warn('Circuit files not found. Run "npm run build" first.');
-        }
-    });
+const describeIf = (condition) => condition ? describe : describe.skip;
 
+describeIf(wasmExists && zkeyExists)('Deposit Circuit', () => {
     describe('Circuit Constraints', () => {
         it('should accept valid deposit inputs', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
 
             const inputs = {
                 deposit_amount: '1000000',
@@ -60,10 +49,6 @@ describe('Deposit Circuit', () => {
         });
 
         it('should enforce amount range check', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
 
             // This test would require negative amount to fail
             // In practice, the circuit should reject amounts outside valid range
@@ -88,10 +73,6 @@ describe('Deposit Circuit', () => {
         });
 
         it('should enforce timestamp format', async () => {
-            if (!wasmExists || !zkeyExists) {
-                console.log('Skipping: Circuit files not found');
-                return;
-            }
 
             const inputs = {
                 deposit_amount: '1000000',

@@ -35,10 +35,10 @@ export class MerkleTree {
      * Hash two nodes together using Poseidon
      */
     private async hashNodes(left: string, right: string): Promise<string> {
-        // Convert hex strings to BigInt for Poseidon
-        const leftBN = new BN(left.startsWith('0x') ? left.slice(2) : left, 16);
-        const rightBN = new BN(right.startsWith('0x') ? right.slice(2) : right, 16);
-        return await CryptoUtils.poseidonHash([leftBN.toString(), rightBN.toString()]);
+        // Ensure both are hex strings, then pass directly to poseidonHash
+        const leftHex = left.startsWith('0x') ? left : '0x' + left;
+        const rightHex = right.startsWith('0x') ? right : '0x' + right;
+        return await CryptoUtils.poseidonHash([leftHex, rightHex]);
     }
 
     /**
