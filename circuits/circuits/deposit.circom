@@ -65,17 +65,25 @@ template DepositCircuit(levels) {
     amountBits.in <== deposit_amount;
 
     // 2. Nullifier Derivation
-    // nullifier = Poseidon(secret, pathIndices)
-    // We use pathIndices as the "leaf_index" proxy for uniqueness
-    component nullifierHasher = Poseidon(2);
-    nullifierHasher.inputs[0] <== secret;
+    // CRITICAL: Nullifier must be derived from secret + commitment, NOT pathIndices
+    // pathIndices are public and not secret - using them would be cryptographically flawed
+    // nullifier = Poseidon(secret, commitment) ensures uniqueness and secrecy
+    component commitmentHasherForNullifier = Poseidon(3);
+    commitmentHasherForNullifier.inputs[0] <== deposit_amount;
+    commitmentHasherForNullifier.inputs[1] <== secret;
     
-    // Pack indices into a single signal for hashing
+    // Pack indices into a single signal for commitment uniqueness
     var indexVal = 0;
     for(var i=0; i<levels; i++) {
         indexVal += pathIndices[i] * (2**i);
     }
-    nullifierHasher.inputs[1] <== indexVal;
+    commitmentHasherForNullifier.inputs[2] <== indexVal;
+    signal commitment_pre <== commitmentHasherForNullifier.out;
+    
+    // Derive nullifier from secret + commitment (not pathIndices alone)
+    component nullifierHasher = Poseidon(2);
+    nullifierHasher.inputs[0] <== secret;
+    nullifierHasher.inputs[1] <== commitment_pre;
     signal nullifier <== nullifierHasher.out;
 
     // 3. Commitment Generation
@@ -83,12 +91,8 @@ template DepositCircuit(levels) {
     // Note: Using Poseidon instead of Pedersen for efficiency in Merkle Tree, 
     // though Whitepaper mentions Pedersen for Homomorphic properties.
     // We use Pedersen for value commitments in Position updates, but Poseidon for the "Shielded Note" commitment.
-    component commitmentHasher = Poseidon(3);
-    commitmentHasher.inputs[0] <== deposit_amount;
-    commitmentHasher.inputs[1] <== secret;
-    commitmentHasher.inputs[2] <== nullifier;
-    
-    signal commitment <== commitmentHasher.out;
+    // Use the pre-computed commitment
+    signal commitment <== commitment_pre;
 
     // 4. Merkle Tree Insertion Verification
     // Verify that the "old_root" contained a Zero/Empty leaf at the index
@@ -104,9 +108,17 @@ template DepositCircuit(levels) {
     }
 
     // 5. Temporal Mixing Constraint
-    // Ensure timestamp is recent: current_time - 24h <= timestamp <= current_time
-    // This is checked on the smart contract level usually, but we can constrain inputs if needed.
-    // For circuit, we just output it as a public signal to be verified by the verifier.
+    // Ensure timestamp is within valid range: current_time - 24h <= timestamp <= current_time
+    // This prevents timing attacks by ensuring deposits are mixed temporally
+    // We enforce: timestamp >= 0 (valid unix timestamp)
+    // The upper bound check (timestamp <= current_time) is done on-chain
+    // The lower bound check (timestamp >= current_time - 24h) is done on-chain
+    // Here we ensure timestamp is a valid 64-bit unsigned integer
+    component timestampBits = Num2Bits(64);
+    timestampBits.in <== timestamp;
+    
+    // Note: Actual bounds checking (timestamp <= current_time and timestamp >= current_time - 24h)
+    // happens on-chain in the smart contract. This circuit only ensures timestamp is a valid 64-bit value.
     
     signal output commitment_out;
     commitment_out <== commitment;

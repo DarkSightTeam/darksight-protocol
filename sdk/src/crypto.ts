@@ -1,53 +1,152 @@
 /**
  * Cryptographic primitives for DarkSight
- * Implements Baby JubJub curve operations and Pedersen commitments
- * 
- * Note: In a real implementation, this would use circomlibjs or similar WASM bindings.
- * For this pre-alpha/design SDK, we implement the logic structures.
+ * Implements Baby JubJub curve operations and Pedersen commitments using circomlibjs
  */
 
 import { BN } from 'bn.js';
+import * as circomlib from 'circomlibjs';
+
+// Lazy initialization of circomlib modules
+let pedersenHash: any = null;
+let poseidon: any = null;
+
+async function getPedersenHash() {
+    if (!pedersenHash) {
+        pedersenHash = await circomlib.buildPedersenHash();
+    }
+    return pedersenHash;
+}
+
+async function getPoseidon() {
+    if (!poseidon) {
+        poseidon = await circomlib.buildPoseidon();
+    }
+    return poseidon;
+}
 
 export class CryptoUtils {
-    // Baby JubJub Field Modulus
+    // Baby JubJub Field Modulus (BN254 curve)
     static readonly FIELD_MODULUS = new BN('21888242871839275222246405745257275088548364400416034343698204186575808495617');
 
     /**
      * Generate a random field element (private key/secret)
+     * Returns a hex string representation of 32 random bytes
      */
     static generateSecret(): string {
-        // Mock implementation of cryptographically secure random generation
-        // mapped to the field
         const randomBytes = new Uint8Array(32);
-        if (typeof crypto !== 'undefined') {
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
             crypto.getRandomValues(randomBytes);
         } else {
-            // Node.js fallback or temp logic
-            for(let i=0; i<32; i++) randomBytes[i] = Math.floor(Math.random() * 256);
+            // Node.js fallback - use crypto module
+            const nodeCrypto = require('crypto');
+            const buf = nodeCrypto.randomBytes(32);
+            randomBytes.set(buf);
         }
         return Buffer.from(randomBytes).toString('hex');
     }
 
     /**
-     * Compute Pedersen Commitment
-     * C = v*G + r*H
+     * Compute Pedersen Commitment on Baby JubJub curve
+     * C = PedersenHash(value, randomness)
+     * 
+     * Note: circomlib's PedersenHash is actually a hash function, not a full commitment scheme.
+     * For full Pedersen commitments (v*G + r*H), we'd need elliptic curve operations.
+     * This implementation uses PedersenHash which is SNARK-friendly and matches circuit usage.
+     * 
+     * @param value - The value to commit to (as number or BN)
+     * @param randomness - Randomness as hex string
+     * @returns Commitment as hex string
      */
-    static pedersenCommitment(value: number, randomness: string): string {
-        // In production: Elliptic curve scalar multiplication
-        // Here: Deterministic mock for logic verification
-        const v = new BN(value);
+    static async pedersenCommitment(value: number | BN, randomness: string): Promise<string> {
+        const pedersen = await getPedersenHash();
+        const v = typeof value === 'number' ? new BN(value) : value;
         const r = new BN(randomness, 'hex');
         
-        // Simulate C = Hash(v, r) for non-ECC mock envs
-        // This allows the SDK to "run" without compiling WASM bindings yet
+        // PedersenHash takes inputs as array of BigInts
+        const inputs = [v.toString(), r.toString()];
+        const hash = pedersen(inputs);
+        
+        // Convert to hex string
+        return '0x' + hash.toString(16).padStart(64, '0');
+    }
+
+    /**
+     * Compute Poseidon hash
+     * Used for Merkle trees and nullifier generation
+     * 
+     * @param inputs - Array of inputs (numbers, BN, or hex strings)
+     * @returns Hash as hex string
+     */
+    static async poseidonHash(inputs: (number | BN | string)[]): Promise<string> {
+        const poseidonInstance = await getPoseidon();
+        
+        // Convert all inputs to BigInt
+        const bigIntInputs = inputs.map(input => {
+            if (typeof input === 'string') {
+                if (input.startsWith('0x')) {
+                    return BigInt(input);
+                }
+                return BigInt('0x' + input);
+            }
+            if (BN.isBN(input)) {
+                return BigInt(input.toString());
+            }
+            return BigInt(input);
+        });
+        
+        const hash = poseidonInstance(bigIntInputs);
+        return '0x' + hash.toString(16).padStart(64, '0');
+    }
+
+    /**
+     * Compute Nullifier for deposit/withdrawal
+     * nullifier = Poseidon(secret, commitment)
+     * 
+     * This matches the circuit implementation where nullifier is derived from
+     * secret + commitment, not from pathIndices alone.
+     * 
+     * @param secret - User's secret key (hex string)
+     * @param commitment - The commitment hash (hex string)
+     * @returns Nullifier as hex string
+     */
+    static async computeNullifier(secret: string, commitment: string): Promise<string> {
+        return await this.poseidonHash([secret, commitment]);
+    }
+
+    /**
+     * Compute Commitment for a deposit note
+     * commitment = Poseidon(amount, secret, index)
+     * 
+     * This matches the deposit circuit implementation.
+     * 
+     * @param amount - Deposit amount
+     * @param secret - User's secret key (hex string)
+     * @param index - Leaf index in Merkle tree
+     * @returns Commitment as hex string
+     */
+    static async computeCommitment(amount: number, secret: string, index: number): Promise<string> {
+        const amountBN = new BN(amount);
+        const indexBN = new BN(index);
+        return await this.poseidonHash([amountBN.toString(), secret, indexBN.toString()]);
+    }
+
+    /**
+     * Synchronous version of pedersenCommitment for backwards compatibility
+     * WARNING: This uses a mock implementation. Use async version for real crypto.
+     */
+    static pedersenCommitmentSync(value: number, randomness: string): string {
+        console.warn('pedersenCommitmentSync is deprecated. Use async pedersenCommitment for real cryptography.');
+        const v = new BN(value);
+        const r = new BN(randomness, 'hex');
         return `comm_${v.toString(16)}_${r.toString(16).substring(0,8)}`;
     }
 
     /**
-     * Compute Nullifier
-     * nullifier = Poseidon(secret, index)
+     * Synchronous version of computeNullifier for backwards compatibility
+     * WARNING: This uses a mock implementation. Use async version for real crypto.
      */
-    static computeNullifier(secret: string, index: number): string {
+    static computeNullifierSync(secret: string, index: number): string {
+        console.warn('computeNullifierSync is deprecated. Use async computeNullifier for real cryptography.');
         return `null_${secret.substring(0,8)}_${index}`;
     }
 }

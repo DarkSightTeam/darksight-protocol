@@ -46,11 +46,11 @@ export class DarkSightSDK {
     // 2. Create Commitment
     // Note: In production we'd query the next leaf index
     const nextIndex = 0; // mock
-    const nullifier = CryptoUtils.computeNullifier(secret, nextIndex);
-    const commitment = CryptoUtils.pedersenCommitment(amount, secret);
+    const commitment = await CryptoUtils.computeCommitment(amount, secret, nextIndex);
+    const nullifier = await CryptoUtils.computeNullifier(secret, commitment);
 
     // 3. Generate Proof Inputs (Witness)
-    const path = this.merkleTree.generatePath(nextIndex);
+    const path = await this.merkleTree.generatePath(nextIndex);
     
     // 4. Mock Transaction Submission
     // const tx = new Transaction().add(createDepositInstruction(...));
@@ -58,7 +58,7 @@ export class DarkSightSDK {
     const signature = 'mock_tx_signature_' + Date.now();
 
     // 5. Update Local State
-    this.merkleTree.insert(nextIndex, commitment);
+    await this.merkleTree.insert(nextIndex, commitment);
 
     return {
       amount,
@@ -94,8 +94,13 @@ export class DarkSightSDK {
     // 1. Generate Position Secret
     const secret = CryptoUtils.generateSecret();
     
-    // 2. Compute new commitment
-    const commitment = CryptoUtils.pedersenCommitment(options.amount, secret);
+    // 2. Compute new commitment using Poseidon (matching circuit)
+    // For position updates, we use a simplified commitment
+    const commitment = await CryptoUtils.poseidonHash([
+      options.amount,
+      secret,
+      options.marketId
+    ]);
 
     return {
       id: 'pos_' + Date.now(),
@@ -132,7 +137,8 @@ export class DarkSightSDK {
     // 1. Prove ownership of a note
     // 2. Generate Nullifier to prevent double spend
     const mockSecret = CryptoUtils.generateSecret();
-    const nullifier = CryptoUtils.computeNullifier(mockSecret, 0);
+    const mockCommitment = await CryptoUtils.computeCommitment(options.amount, mockSecret, 0);
+    const nullifier = await CryptoUtils.computeNullifier(mockSecret, mockCommitment);
 
     return {
       amount: options.amount,
