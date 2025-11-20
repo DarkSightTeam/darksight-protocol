@@ -16,11 +16,12 @@ Core Zero-Knowledge constraints implemented in Circom.
 - **Withdrawal**: Nullifier generation and Merkle inclusion proofs.
 
 ### 2. [SDK](./sdk) (`/sdk`)
-**Status: Functional Simulation**
+**Status: Pre-Alpha Implementation**
 TypeScript SDK for client-side interaction.
-- **Cryptography**: Client-side Pedersen commitments and nullifier generation (Baby JubJub).
-- **State Management**: Local Sparse Merkle Tree for witness generation.
-- **API**: Full deposit, trade, and withdraw flow simulation.
+- **Cryptography**: Real Pedersen commitments and Poseidon hashing using circomlibjs (Baby JubJub).
+- **State Management**: Sparse Merkle Tree implementation with Poseidon hashing.
+- **Proof Generation**: Integration with snarkjs for Groth16 proof generation.
+- **API**: Complete deposit, trade, and withdraw flow implementation.
 
 ### 3. [Research](./research) (`/research`)
 **Status: Validated**
@@ -41,8 +42,8 @@ DarkSight separates **public price discovery** from **private position managemen
 
 ### Prerequisites
 - Node.js 18+
-- Rust / Cargo
-- Python 3.10+ (for simulations)
+- Rust / Cargo (for Solana programs)
+- Python 3.10+ (for research simulations)
 
 ### Installation
 
@@ -73,7 +74,23 @@ cd circuits && npm run generate-proofs
 cd circuits && npm run benchmark
 ```
 
+### Testing
+
+The repository includes comprehensive test coverage:
+- **Circuit Tests**: Deposit, position update, and withdrawal circuit validation
+- **SDK Tests**: Cryptographic primitives, Merkle tree, and SDK integration
+- **Integration Tests**: End-to-end protocol flows
+- **Edge Case Tests**: Boundary conditions and error handling
+
+All tests run automatically via GitHub Actions on push and pull requests.
+
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed development guidelines.
+
+## Documentation
+
+- **[Circuits README](./circuits/README.md)**: Detailed circuit specifications and constraints
+- **[SDK README](./sdk/README.md)**: Complete API reference and usage examples
+- **[Contributing Guide](./CONTRIBUTING.md)**: Development setup and contribution guidelines
 
 ## Security
 
